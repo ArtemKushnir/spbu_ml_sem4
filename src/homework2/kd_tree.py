@@ -4,8 +4,14 @@ from typing import Any, Optional
 
 
 @dataclass
+class Point:
+    values: list[int]
+    label: Any
+
+
+@dataclass
 class Node:
-    points: list[list[int]]
+    points: list[Point]
     split_dim: Optional[int] = None
     left: Optional["Node"] = None
     right: Optional["Node"] = None
@@ -14,11 +20,11 @@ class Node:
 @dataclass
 class Neighbour:
     distance: float
-    point: list[int]
+    point: Point
     dim: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.dim = len(self.point)
+        self.dim = len(self.point.values)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Neighbour):
@@ -61,44 +67,44 @@ class MaxHeap:
         self.size = 0
         return k_min_neighbour
 
-    def get_max_element(self) -> float:
-        return -self.heap[0].distance
+    def get_max_element(self) -> Optional[float]:
+        return -self.heap[0].distance if len(self.heap) > 0 else None
 
 
 class KDTree:
-    def __init__(self, X: list[list[int]], leaf_size: int = 1) -> None:
+    def __init__(self, X: list[Point], leaf_size: int = 1) -> None:
         self.leaf_size: int = leaf_size
-        self.dimension: int = len(X[0])
+        self.dimension: int = len(X[0].values)
         self.size: int = len(X)
         self.head: Optional[Node] = self._create_tree(X)
 
-    def _create_tree(self, X: list[list[int]]) -> Optional[Node]:
+    def _create_tree(self, X: list[Point]) -> Optional[Node]:
         if len(X) == 0:
             return None
         if len(X) <= self.leaf_size:
             return Node(X)
         largest_spread_dim = self._get_largest_spread_dimension(X)
-        X.sort(key=lambda x: x[largest_spread_dim])
+        X.sort(key=lambda x: x.values[largest_spread_dim])
         split_index = len(X) // 2
         curr_node = Node([X[split_index]], largest_spread_dim)
         curr_node.left = self._create_tree(X[:split_index])
         curr_node.right = self._create_tree((X[split_index + 1 :]))
         return curr_node
 
-    def _get_largest_spread_dimension(self, X: list[list[int]]) -> int:
-        min_values = X[0].copy()
-        max_values = X[0].copy()
+    def _get_largest_spread_dimension(self, X: list[Point]) -> int:
+        min_values = X[0].values.copy()
+        max_values = X[0].values.copy()
         for row in X:
-            min_values = [min(min_values[i], row[i]) for i in range(self.dimension)]
-            max_values = [max(min_values[i], row[i]) for i in range(self.dimension)]
+            min_values = [min(min_values[i], row.values[i]) for i in range(self.dimension)]
+            max_values = [max(min_values[i], row.values[i]) for i in range(self.dimension)]
         result = [max_values[i] - min_values[i] for i in range(self.dimension)]
         return result.index(max(result))
 
     def query(self, X: list[list[int]], k: int) -> list[list[Neighbour]]:
+        if k > self.size:
+            raise ValueError("k must be less than the size of the tree")
         result = []
         for row in X:
-            if k > self.size:
-                raise ValueError("k must be less than the size of the tree")
             max_heap = MaxHeap(k)
             self._get_k_near_neighbours(row, self.head, max_heap, k)
             result.append(max_heap.get_k_min())
@@ -109,29 +115,29 @@ class KDTree:
             return
         if curr_node.left is None and curr_node.right is None:
             for curr_point in curr_node.points:
-                max_heap.push(Neighbour(self._get_distance(point, curr_point), curr_point))
+                max_heap.push(Neighbour(self._get_distance(point, curr_point.values), curr_point))
             return
 
         if curr_node.split_dim is None:
             raise TypeError("'split_dim' the dividing node cannot have None")
 
-        if point[curr_node.split_dim] > curr_node.points[0][curr_node.split_dim]:
+        if point[curr_node.split_dim] > curr_node.points[0].values[curr_node.split_dim]:
             self._get_k_near_neighbours(point, curr_node.right, max_heap, k)
 
-            hyperplane_distance = abs(point[curr_node.split_dim] - curr_node.points[0][curr_node.split_dim])
+            hyperplane_distance = abs(point[curr_node.split_dim] - curr_node.points[0].values[curr_node.split_dim])
             max_dist_neighbour = max_heap.get_max_element()
 
-            if hyperplane_distance < max_dist_neighbour or max_heap.size < k:
+            if max_dist_neighbour is None or hyperplane_distance < max_dist_neighbour or max_heap.size < k:
                 self._get_k_near_neighbours(point, curr_node.left, max_heap, k)
         else:
             self._get_k_near_neighbours(point, curr_node.left, max_heap, k)
 
-            hyperplane_distance = abs(point[curr_node.split_dim] - curr_node.points[0][curr_node.split_dim])
+            hyperplane_distance = abs(point[curr_node.split_dim] - curr_node.points[0].values[curr_node.split_dim])
             max_dist_neighbour = max_heap.get_max_element()
 
-            if hyperplane_distance < max_dist_neighbour or max_heap.size < k:
+            if max_dist_neighbour is None or hyperplane_distance < max_dist_neighbour or max_heap.size < k:
                 self._get_k_near_neighbours(point, curr_node.right, max_heap, k)
-        max_heap.push(Neighbour(self._get_distance(point, curr_node.points[0]), curr_node.points[0]))
+        max_heap.push(Neighbour(self._get_distance(point, curr_node.points[0].values), curr_node.points[0]))
 
     def _get_distance(self, first_point: list[int], second_point: list[int]) -> float:
         return sum([(first_point[i] - second_point[i]) ** 2 for i in range(self.dimension)]) ** 0.5
