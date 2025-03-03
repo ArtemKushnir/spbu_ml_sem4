@@ -2,10 +2,12 @@ import heapq
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+import numpy as np
+
 
 @dataclass
 class Point:
-    values: list[int]
+    values: np.ndarray
     label: Any
 
 
@@ -72,11 +74,18 @@ class MaxHeap:
 
 
 class KDTree:
-    def __init__(self, X: list[Point], leaf_size: int = 1) -> None:
+    _METRICS = {
+        "euclidean": lambda a, b: float(np.linalg.norm(a - b)),
+        "manhattan": lambda a, b: np.sum(np.abs(a - b)),
+        "cosine": lambda a, b: 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)),
+    }
+
+    def __init__(self, X: list[Point], leaf_size: int = 1, metric: str = "euclidean") -> None:
         self.leaf_size: int = leaf_size
         self.dimension: int = len(X[0].values)
         self.size: int = len(X)
         self.head: Optional[Node] = self._create_tree(X)
+        self.metric: str = metric
 
     def _create_tree(self, X: list[Point]) -> Optional[Node]:
         if len(X) == 0:
@@ -91,18 +100,13 @@ class KDTree:
         curr_node.right = self._create_tree((X[split_index + 1 :]))
         return curr_node
 
-    def _get_largest_spread_dimension(self, X: list[Point]) -> int:
-        min_values = X[0].values.copy()
-        max_values = X[0].values.copy()
-        for row in X:
-            min_values = [min(min_values[i], row.values[i]) for i in range(self.dimension)]
-            max_values = [max(min_values[i], row.values[i]) for i in range(self.dimension)]
-        result = [max_values[i] - min_values[i] for i in range(self.dimension)]
-        return result.index(max(result))
+    @staticmethod
+    def _get_largest_spread_dimension(X: list[Point]) -> int:
+        data = np.array([point.values for point in X])
+        return int(np.argmax(np.ptp(data, axis=0)))
 
-    def query(self, X: list[list[int]], k: int) -> list[list[Neighbour]]:
-        if k > self.size:
-            raise ValueError("k must be less than the size of the tree")
+    def query(self, X: np.ndarray, k: int) -> list[list[Neighbour]]:
+        k = min(k, self.size)
         result = []
         for row in X:
             max_heap = MaxHeap(k)
@@ -110,7 +114,7 @@ class KDTree:
             result.append(max_heap.get_k_min())
         return result
 
-    def _get_k_near_neighbours(self, point: list[int], curr_node: Optional[Node], max_heap: MaxHeap, k: int) -> None:
+    def _get_k_near_neighbours(self, point: np.ndarray, curr_node: Optional[Node], max_heap: MaxHeap, k: int) -> None:
         if curr_node is None:
             return
         if curr_node.left is None and curr_node.right is None:
@@ -139,5 +143,8 @@ class KDTree:
                 self._get_k_near_neighbours(point, curr_node.right, max_heap, k)
         max_heap.push(Neighbour(self._get_distance(point, curr_node.points[0].values), curr_node.points[0]))
 
-    def _get_distance(self, first_point: list[int], second_point: list[int]) -> float:
-        return sum([(first_point[i] - second_point[i]) ** 2 for i in range(self.dimension)]) ** 0.5
+    def _get_distance(self, first_point: np.ndarray, second_point: np.ndarray) -> float:
+        try:
+            return self._METRICS[self.metric](first_point, second_point)
+        except KeyError:
+            raise ValueError(f"Unknown metric: {self.metric}")
