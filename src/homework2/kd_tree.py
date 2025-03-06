@@ -1,14 +1,17 @@
 import heapq
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Generic, Optional, TypeVar
 
 import numpy as np
+from numpy.typing import NDArray
+
+T = TypeVar("T", bound=np.generic)
 
 
 @dataclass
-class Point:
-    values: np.ndarray
-    label: Any
+class Point(Generic[T]):
+    values: NDArray[np.float64]
+    label: T
 
 
 @dataclass
@@ -105,7 +108,7 @@ class KDTree:
         data = np.array([point.values for point in X])
         return int(np.argmax(np.ptp(data, axis=0)))
 
-    def query(self, X: np.ndarray, k: int) -> list[list[Neighbour]]:
+    def query(self, X: NDArray[np.float64], k: int) -> list[list[Neighbour]]:
         k = min(k, self.size)
         result = []
         for row in X:
@@ -114,7 +117,9 @@ class KDTree:
             result.append(max_heap.get_k_min())
         return result
 
-    def _get_k_near_neighbours(self, point: np.ndarray, curr_node: Optional[Node], max_heap: MaxHeap, k: int) -> None:
+    def _get_k_near_neighbours(
+        self, point: NDArray[np.float64], curr_node: Optional[Node], max_heap: MaxHeap, k: int
+    ) -> None:
         if curr_node is None:
             return
         if curr_node.left is None and curr_node.right is None:
@@ -143,7 +148,7 @@ class KDTree:
                 self._get_k_near_neighbours(point, curr_node.right, max_heap, k)
         max_heap.push(Neighbour(self._get_distance(point, curr_node.points[0].values), curr_node.points[0]))
 
-    def _get_distance(self, first_point: np.ndarray, second_point: np.ndarray) -> float:
+    def _get_distance(self, first_point: NDArray[np.float64], second_point: NDArray[np.float64]) -> float:
         try:
             return self._METRICS[self.metric](first_point, second_point)
         except KeyError:
