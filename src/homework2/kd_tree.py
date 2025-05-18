@@ -54,7 +54,7 @@ class MaxHeap:
 
     def push(self, neighbour: Neighbour) -> None:
         neighbour.distance *= -1
-        if len(self.heap) < self.k:
+        if self.size < self.k:
             heapq.heappush(self.heap, neighbour)
             self.size += 1
             return
